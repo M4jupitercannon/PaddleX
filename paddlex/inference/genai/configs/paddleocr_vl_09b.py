@@ -57,6 +57,15 @@ def get_config(backend):
                 "mm-processor-cache-gb": 0,
                 "enforce-eager": True,
             }
+        elif torch.version.hip is not None and torch.version.cuda is None:
+            return {
+                "trust-remote-code": True,
+                "gpu-memory-utilization": 0.7,
+                "max-model-len": 16384,
+                "max-num-batched-tokens": 16384,
+                "max-num-seqs": 128,
+                "enforce-eager": True,
+            }
         else:
             return {
                 "trust-remote-code": True,

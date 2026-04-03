@@ -52,6 +52,10 @@ def constr_device(device_type, device_ids):
 def get_default_device():
     import paddle
 
+    # Treat ROCm devices as DCU by default so downstream device-type checks and
+    # ROCm-specific runtime options are consistently applied.
+    if paddle.is_compiled_with_rocm() and paddle.device.cuda.device_count() > 0:
+        return constr_device("dcu", [0])
     if paddle.device.is_compiled_with_cuda() and paddle.device.cuda.device_count() > 0:
         return constr_device("gpu", [0])
     else:
