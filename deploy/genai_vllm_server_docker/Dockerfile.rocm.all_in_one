@@ -1,0 +1,66 @@
+# syntax=docker/dockerfile:1.7
+
+FROM rocm/vllm-dev:rocm7.2_navi_ubuntu24.04_py3.12_pytorch_2.9_vllm_0.14.0rc0
+
+ARG BUNDLED_DATASET_NAME=""
+ARG BUNDLED_DATASET_URL=""
+ARG PADDLE_PDX_MODEL_SOURCE=bos
+ARG PADDLEX_PRETEND_VERSION=0.0.dev0
+
+RUN apt-get update \
+    && apt-get install -y libgl1 rsync tini \
+    && rm -rf /var/lib/apt/lists/*
+
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PADDLE_PDX_DISABLE_MODEL_SOURCE_CHECK=True \
+    PADDLE_PDX_MODEL_SOURCE=${PADDLE_PDX_MODEL_SOURCE} \
+    PADDLE_PDX_CACHE_HOME=/opt/paddlex/cache \
+    PADDLEX_ALL_IN_ONE_CONFIG_DIR=/opt/paddlex/configs \
+    PADDLEX_ALL_IN_ONE_DATASET_DIR=/opt/paddlex/datasets \
+    SETUPTOOLS_SCM_PRETEND_VERSION_FOR_PADDLEX=${PADDLEX_PRETEND_VERSION}
+
+WORKDIR /workspace/PaddleX
+COPY PaddleX /workspace/PaddleX
+COPY extra_data /opt/paddlex/bootstrap
+
+RUN --mount=type=cache,target=/root/.cache/pip \
+    python -m pip install . \
+    && python -m pip install --force-reinstall --no-cache-dir \
+        "fsspec==2025.9.0" \
+        "numpy==2.2.6" \
+        "PyYAML==6.0.2" \
+        "scikit-image==0.25.2" \
+        "einops" \
+        "openai>=1.63" \
+        "transformers<5.0.0" \
+        "uvloop"
+
+RUN mkdir -p \
+        "${PADDLE_PDX_CACHE_HOME}" \
+        "${PADDLEX_ALL_IN_ONE_CONFIG_DIR}" \
+        "${PADDLEX_ALL_IN_ONE_DATASET_DIR}" \
+    && if [ -d /opt/paddlex/bootstrap/cache ]; then \
+        rsync -a /opt/paddlex/bootstrap/cache/ "${PADDLE_PDX_CACHE_HOME}/"; \
+    fi \
+    && if [ -d /opt/paddlex/bootstrap/datasets ]; then \
+        rsync -a /opt/paddlex/bootstrap/datasets/ "${PADDLEX_ALL_IN_ONE_DATASET_DIR}/"; \
+    fi \
+    && if [ -n "${BUNDLED_DATASET_URL}" ]; then \
+        dataset_target_dir="${PADDLEX_ALL_IN_ONE_DATASET_DIR}/${BUNDLED_DATASET_NAME}"; \
+        mkdir -p "${dataset_target_dir}"; \
+        BUNDLED_DATASET_URL="${BUNDLED_DATASET_URL}" python -c "import os, urllib.request; urllib.request.urlretrieve(os.environ['BUNDLED_DATASET_URL'], '/tmp/bundled_dataset.tar')"; \
+        tar -xf /tmp/bundled_dataset.tar -C "${dataset_target_dir}"; \
+        rm -f /tmp/bundled_dataset.tar; \
+    fi \
+    && python deploy/genai_vllm_server_docker/prepare_rocm_all_in_one.py \
+        --pipeline-config paddlex/configs/pipelines/PaddleOCR-VL-1.5.yaml \
+        --output-config-dir "${PADDLEX_ALL_IN_ONE_CONFIG_DIR}" \
+        --dataset-dir "${PADDLEX_ALL_IN_ONE_DATASET_DIR}" \
+        --server-url "http://127.0.0.1:8080/v1" \
+    && rm -rf /opt/paddlex/bootstrap
+
+EXPOSE 8080
+
+ENTRYPOINT ["tini", "--"]
+CMD ["paddlex_genai_server", "--model_name", "PaddleOCR-VL-1.5-0.9B", "--host", "0.0.0.0", "--port", "8080", "--backend", "vllm"]
