@@ -6,11 +6,14 @@ RUN apt-get update \
 
 ENV PYTHONUNBUFFERED=1
 ENV PYTHONDONTWRITEBYTECODE=1
+ENV PADDLE_PDX_DISABLE_MODEL_SOURCE_CHECK=True
 
-ARG PADDLEX_VERSION=">=3.3.6,<3.4"
+WORKDIR /workspace/PaddleX
+COPY . /workspace/PaddleX
+
 RUN --mount=type=cache,target=/root/.cache/pip \
-    python -m pip install "paddlex${PADDLEX_VERSION}" \
-    && paddlex --install genai-vllm-server
+    python -m pip install . \
+    && python -m pip install --force-reinstall --no-cache-dir "numpy==2.2.6" "scikit-image==0.25.2"
 
 EXPOSE 8080
 
