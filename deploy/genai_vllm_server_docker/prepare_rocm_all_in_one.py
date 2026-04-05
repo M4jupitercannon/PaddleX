@@ -49,7 +49,7 @@ def parse_args():
     parser.add_argument(
         "--server-url",
         type=str,
-        default="http://127.0.0.1:8080/v1",
+        default="http://127.0.0.1:8118/v1",
         help="OpenAI-compatible vLLM endpoint used by the generated server config.",
     )
     return parser.parse_args()
