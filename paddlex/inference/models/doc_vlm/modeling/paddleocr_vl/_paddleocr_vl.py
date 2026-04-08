@@ -176,24 +176,31 @@ class PaddleOCRVLForConditionalGeneration(Ernie4_5PretrainedModel):
             )
             image_index, video_index = 0, 0
             for i, input_ids in enumerate(total_input_ids):
-                input_ids = input_ids[attention_mask[i] == 1]
+                row_tokens = total_input_ids[i].numpy().tolist()
+                mask_np = attention_mask[i].numpy().astype(bool)
+                input_tokens = [tok for tok, keep in zip(row_tokens, mask_np) if keep]
                 image_nums, video_nums = 0, 0
-                vision_start_indices = paddle.nonzero(
-                    input_ids == vision_start_token_id
-                ).squeeze(1)
-                vision_tokens = input_ids[vision_start_indices + 1]
-                image_nums = (vision_tokens == image_token_id).sum()
-                video_nums = (vision_tokens == video_token_id).sum()
-                input_tokens = input_ids.tolist()
+                vision_start_indices_list = [
+                    idx
+                    for idx, tok in enumerate(input_tokens[:-1])
+                    if tok == vision_start_token_id
+                ]
+                vision_tokens_list = []
+                for idx in vision_start_indices_list:
+                    nxt = idx + 1
+                    if nxt < len(input_tokens):
+                        vision_tokens_list.append(input_tokens[nxt])
+                image_nums = vision_tokens_list.count(image_token_id)
+                video_nums = vision_tokens_list.count(video_token_id)
                 llm_pos_ids_list: list = []
                 st = 0
                 remain_images, remain_videos = image_nums, video_nums
                 for _ in range(image_nums + video_nums):
-                    if image_token_id in input_tokens and remain_images > 0:
+                    if remain_images > 0 and image_token_id in input_tokens[st:]:
                         ed_image = input_tokens.index(image_token_id, st)
                     else:
                         ed_image = len(input_tokens) + 1
-                    if video_token_id in input_tokens and remain_videos > 0:
+                    if remain_videos > 0 and video_token_id in input_tokens[st:]:
                         ed_video = input_tokens.index(video_token_id, st)
                     else:
                         ed_video = len(input_tokens) + 1
@@ -282,7 +289,10 @@ class PaddleOCRVLForConditionalGeneration(Ernie4_5PretrainedModel):
                     )
 
                 llm_positions = paddle.concat(llm_pos_ids_list, axis=1).reshape((3, -1))
-                position_ids[..., i, attention_mask[i] == 1] = llm_positions
+                position_ids_np = position_ids.numpy()
+                mask_np = attention_mask[i].numpy().astype(bool)
+                position_ids_np[:, i, mask_np] = llm_positions.numpy()
+                position_ids = paddle.to_tensor(position_ids_np, dtype=position_ids.dtype)
                 mrope_position_deltas.append(
                     llm_positions.max() + 1 - len(total_input_ids[i])
                 )
@@ -706,7 +716,9 @@ class PaddleOCRVLForConditionalGeneration(Ernie4_5PretrainedModel):
 
                 image_embeds = self.mlp_AR(image_embeds, image_grid_thw)
 
-                n_image_tokens = (input_ids == self.config.image_token_id).sum().item()
+                n_image_tokens = int(
+                    np.sum(input_ids.numpy() == self.config.image_token_id)
+                )
                 image_embeds = paddle.concat(image_embeds, axis=0)
                 n_image_features = image_embeds.shape[0]
                 if n_image_tokens != n_image_features:
@@ -720,8 +732,16 @@ class PaddleOCRVLForConditionalGeneration(Ernie4_5PretrainedModel):
                 image_mask = mask_expanded
 
                 image_embeds = image_embeds.astype(inputs_embeds.dtype)
-
+                # region agent log
+                print(
+                    f"[vlm-debug] before_image_insert seq={inputs_embeds.shape[1]} features={n_image_features}",
+                    flush=True,
+                )
+                # endregion
                 inputs_embeds = inputs_embeds.masked_scatter(image_mask, image_embeds)
+                # region agent log
+                print("[vlm-debug] after_image_insert", flush=True)
+                # endregion
         else:
             if inputs_embeds.shape[0] != 1:
                 raise NotImplementedError

@@ -6,6 +6,9 @@ server_url="${1:-http://127.0.0.1:8118/v1}"
 images_dir="${2:-/opt/paddlex/datasets/images}"
 pdfs_dir="${3:-/opt/paddlex/datasets/omni1_5_pdfs}"
 benchmark_root="${4:-/opt/paddlex/benchmarks}"
+require_benchmark="${5:-true}"
+require_images="${6:-true}"
+require_pdfs="${7:-true}"
 
 fail() {
     echo "[preflight][error] $*" >&2
@@ -32,13 +35,25 @@ echo "[preflight] checking ROCm device files"
 [[ -d /dev/dri ]] || fail "/dev/dri is missing"
 
 echo "[preflight] checking datasets"
-[[ -d "${images_dir}" ]] || fail "images directory missing: ${images_dir}"
-[[ -d "${pdfs_dir}" ]] || fail "pdf directory missing: ${pdfs_dir}"
+if [[ "${require_images}" == "true" ]]; then
+    [[ -d "${images_dir}" ]] || fail "images directory missing: ${images_dir}"
+else
+    echo "[preflight] images directory check skipped for this mode"
+fi
+if [[ "${require_pdfs}" == "true" ]]; then
+    [[ -d "${pdfs_dir}" ]] || fail "pdf directory missing: ${pdfs_dir}"
+else
+    echo "[preflight] pdf directory check skipped for this mode"
+fi
 
 echo "[preflight] checking benchmark assets"
-[[ -d "${benchmark_root}" ]] || fail "benchmark root missing: ${benchmark_root}"
-if ! find "${benchmark_root}" -maxdepth 5 -type f -path "*/e2e/test_local.py" | grep -q .; then
-    fail "could not find benchmark e2e/test_local.py under ${benchmark_root}"
+if [[ "${require_benchmark}" == "true" ]]; then
+    [[ -d "${benchmark_root}" ]] || fail "benchmark root missing: ${benchmark_root}"
+    if ! find "${benchmark_root}" -maxdepth 5 -type f -path "*/e2e/test_local.py" | grep -q .; then
+        fail "could not find benchmark e2e/test_local.py under ${benchmark_root}"
+    fi
+else
+    echo "[preflight] benchmark assets check skipped for this mode"
 fi
 
 echo "[preflight] probing server: ${server_url}/models"

@@ -208,6 +208,29 @@ resolve_benchmark_e2e_dir() {
     return 1
 }
 
+mode_needs_benchmark_assets() {
+    case "${mode}" in
+        all|speed-vllm)
+            return 0
+            ;;
+        *)
+            return 1
+            ;;
+    esac
+}
+
+print_benchmark_debug() {
+    echo "[runner][debug] benchmark_root=${benchmark_root}" >&2
+    if [[ -d "${benchmark_root}" ]]; then
+        echo "[runner][debug] benchmark_root entries:" >&2
+        ls -la "${benchmark_root}" >&2 || true
+        echo "[runner][debug] benchmark candidates (*/e2e/test_local.py):" >&2
+        find "${benchmark_root}" -maxdepth 5 -type f -path "*/e2e/test_local.py" >&2 || true
+    else
+        echo "[runner][debug] benchmark_root does not exist" >&2
+    fi
+}
+
 wait_for_server() {
     local max_attempts=120
     local attempt=1
@@ -373,28 +396,64 @@ PY
 }
 
 resolved_pdfs_dir="$(resolve_pdfs_dir)"
-set +e
-benchmark_e2e_dir="$(resolve_benchmark_e2e_dir)"
-resolve_rc=$?
-set -e
-if [[ ${resolve_rc} -ne 0 ]]; then
-    overall_exit_code=1
-    speed_status="failed-preflight"
-    vllm_status="failed-preflight"
-    native_status="failed-preflight"
-    echo "[runner][error] could not resolve benchmark e2e directory under ${benchmark_root}" >&2
-    exit "${overall_exit_code}"
+require_benchmark="false"
+require_images="false"
+require_pdfs="false"
+case "${mode}" in
+    all)
+        require_benchmark="true"
+        require_images="true"
+        require_pdfs="true"
+        ;;
+    precision-native|precision-vllm)
+        require_images="true"
+        ;;
+    speed-vllm)
+        require_benchmark="true"
+        require_pdfs="true"
+        ;;
+esac
+if mode_needs_benchmark_assets; then
+    require_benchmark="true"
+    set +e
+    benchmark_e2e_dir="$(resolve_benchmark_e2e_dir)"
+    resolve_rc=$?
+    set -e
+    if [[ ${resolve_rc} -ne 0 ]]; then
+        overall_exit_code=1
+        if [[ "${mode}" == "speed-vllm" ]]; then
+            speed_status="failed-preflight"
+        else
+            speed_status="failed-preflight"
+            vllm_status="failed-preflight"
+            native_status="failed-preflight"
+        fi
+        echo "[runner][error] could not resolve benchmark e2e directory under ${benchmark_root}" >&2
+        print_benchmark_debug
+        exit "${overall_exit_code}"
+    fi
 fi
 
 bash "$(dirname -- "$0")/preflight_rocm_all_in_one.sh" \
     "${server_url}" \
     "${images_dir}" \
     "${resolved_pdfs_dir}" \
-    "${benchmark_root}" >"${preflight_log}" 2>&1 || {
+    "${benchmark_root}" \
+    "${require_benchmark}" \
+    "${require_images}" \
+    "${require_pdfs}" >"${preflight_log}" 2>&1 || {
         overall_exit_code=1
-        speed_status="failed-preflight"
-        vllm_status="failed-preflight"
-        native_status="failed-preflight"
+        if [[ "${mode}" == "speed-vllm" ]]; then
+            speed_status="failed-preflight"
+        elif [[ "${mode}" == "precision-vllm" ]]; then
+            vllm_status="failed-preflight"
+        elif [[ "${mode}" == "precision-native" ]]; then
+            native_status="failed-preflight"
+        else
+            speed_status="failed-preflight"
+            vllm_status="failed-preflight"
+            native_status="failed-preflight"
+        fi
         echo "[runner][error] preflight failed; see ${preflight_log}" >&2
         exit "${overall_exit_code}"
     }

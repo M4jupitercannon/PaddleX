@@ -24,6 +24,8 @@ This build now defaults to doc-compatible vLLM port `8118`, and includes:
 - speed pdf dataset (`omni1_5_pdfs.tar`)
 - benchmark scripts (`ocr-vlm-benchmark-f29cfe4.tar`)
 
+The build now validates benchmark extraction by requiring `**/e2e/test_local.py` in the bundled benchmark asset. If this file is missing, the image build fails fast.
+
 If you already have a local PaddleX cache or extra dataset directories, you can merge them into the image:
 
 ```bash

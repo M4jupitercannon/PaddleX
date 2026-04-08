@@ -235,6 +235,15 @@ for dataset_dir in "${dataset_dirs[@]}"; do
         "${context_dir}/extra_data/datasets/${dataset_name}/"
 done
 
+if [[ -z "${benchmark_url}" ]]; then
+    echo "benchmark URL must not be empty for all-in-one builds (--benchmark-url)." >&2
+    exit 2
+fi
+if [[ -z "${benchmark_name}" ]]; then
+    echo "benchmark name must not be empty for all-in-one builds (--benchmark-name)." >&2
+    exit 2
+fi
+
 DOCKER_BUILDKIT=1 docker build \
     -f "${context_dir}/PaddleX/deploy/genai_vllm_server_docker/Dockerfile.rocm.all_in_one" \
     -t "${tag}" \

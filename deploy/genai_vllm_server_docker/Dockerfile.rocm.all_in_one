@@ -86,6 +86,7 @@ RUN mkdir -p \
         --asset-sha256 "${BENCHMARK_ASSET_SHA256}" \
         --asset-kind benchmark \
         --target-root "${PADDLEX_ALL_IN_ONE_BENCHMARK_DIR}" \
+        --required-glob "**/e2e/test_local.py" \
     && python deploy/genai_vllm_server_docker/prepare_rocm_all_in_one.py \
         --pipeline-config paddlex/configs/pipelines/PaddleOCR-VL-1.5.yaml \
         --output-config-dir "${PADDLEX_ALL_IN_ONE_CONFIG_DIR}" \

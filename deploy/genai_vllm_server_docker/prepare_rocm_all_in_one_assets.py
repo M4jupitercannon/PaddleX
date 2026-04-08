@@ -53,6 +53,14 @@ def parse_args() -> argparse.Namespace:
         default=1024,
         help="Minimum downloaded file size validation threshold.",
     )
+    parser.add_argument(
+        "--required-glob",
+        default="",
+        help=(
+            "Optional glob pattern that must match at least one extracted file "
+            "(for example '**/e2e/test_local.py')."
+        ),
+    )
     return parser.parse_args()
 
 
@@ -90,6 +98,7 @@ def maybe_download_and_extract(
     asset_kind: str,
     target_root: Path,
     min_bytes: int,
+    required_glob: str = "",
 ) -> None:
     if not asset_url:
         print(f"[skip] {asset_kind}: no url provided")
@@ -132,6 +141,14 @@ def maybe_download_and_extract(
 
     print(f"[extract] {asset_kind}: {archive_path} -> {extract_dir}")
     safe_extract(archive_path, extract_dir)
+    if required_glob:
+        has_required = any(extract_dir.glob(required_glob))
+        if not has_required:
+            raise RuntimeError(
+                f"{asset_kind} required_glob not found after extract: "
+                f"{required_glob!r} under {extract_dir}"
+            )
+        print(f"[verify] {asset_kind}: required_glob ok ({required_glob})")
     archive_path.unlink(missing_ok=True)
 
 
@@ -144,6 +161,7 @@ def main() -> None:
         asset_kind=args.asset_kind,
         target_root=args.target_root,
         min_bytes=args.min_bytes,
+        required_glob=args.required_glob.strip(),
     )
 
 
