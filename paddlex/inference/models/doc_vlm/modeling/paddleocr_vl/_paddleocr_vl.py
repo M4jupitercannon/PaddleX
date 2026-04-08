@@ -732,16 +732,7 @@ class PaddleOCRVLForConditionalGeneration(Ernie4_5PretrainedModel):
                 image_mask = mask_expanded
 
                 image_embeds = image_embeds.astype(inputs_embeds.dtype)
-                # region agent log
-                print(
-                    f"[vlm-debug] before_image_insert seq={inputs_embeds.shape[1]} features={n_image_features}",
-                    flush=True,
-                )
-                # endregion
                 inputs_embeds = inputs_embeds.masked_scatter(image_mask, image_embeds)
-                # region agent log
-                print("[vlm-debug] after_image_insert", flush=True)
-                # endregion
         else:
             if inputs_embeds.shape[0] != 1:
                 raise NotImplementedError
